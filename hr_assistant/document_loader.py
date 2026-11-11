@@ -1,0 +1,89 @@
+import json
+from langchain_core.documents import Document
+from hr_assistant import config
+from google.cloud import storage
+
+##Extract Policy
+
+
+def extract_policy_category(text: str) -> str:
+    """Every policy file starts with a 'Policy Category: X' line (HR docs)
+    or a 'Category: X' line (noise docs) — pull whichever is present out.
+    Shared with processor.py (05)."""
+    for line in text.splitlines()[
+        :5
+    ]:  # only check the first 5 lines, the category is always at the top
+        stripped = line.strip().lower()
+        if stripped.startswith("policy category:"):
+            return line.split(":", 1)[1].strip()
+        if stripped.startswith("category:"):
+            return line.split(":", 1)[1].strip()
+    return "Unknown"
+
+
+## Load Data from GCS
+
+
+def load_documents_from_gcs(
+    bucket_name: str = config.GCS_BUCKET_NAME, prefix: str = config.GCS_PREFIX
+) -> list[Document]:
+    """List and download every .txt file under the given GCS prefix,
+    returning one LangChain Document per file with source + category
+    metadata."""
+
+    client = storage.Client(project=config.PROJECT_ID)
+    bucket = client.bucket(bucket_name)
+
+    documents = []
+    for blob in bucket.list_blobs(prefix=prefix):
+        if not blob.name.endswith(".txt"):
+            continue
+        text = blob.download_as_text()
+        filename = blob.name.rsplit("/", 1)[-1]
+        documents.append(
+            Document(
+                page_content=text,
+                metadata={
+                    "source": filename,
+                    "policy_category": extract_policy_category(text),
+                    "gcs_path": f"gs://{bucket_name}/{blob.name}",
+                },
+            )
+        )
+    return documents
+
+
+# load processed data from gcs
+
+
+def load_processed_documents_from_gcs(
+    bucket_name: str = config.GCS_BUCKET_NAME,
+    prefixes: tuple[str, ...] = (
+        config.PROCESSED_HR_PREFIX,
+        config.PROCESSED_NOISE_PREFIX,
+    ),
+) -> list[Document]:
+    """Read the processed zone (JSON records written by processor.py) and
+    return LangChain Documents. No parsing here — just reading already-parsed
+    text out of JSON. This is what the ingestion pipeline (09) calls."""
+
+    client = storage.Client(project=config.PROJECT_ID)
+    bucket = client.bucket(bucket_name)
+
+    documents = []
+    for prefix in prefixes:
+        for blob in bucket.list_blobs(prefix=prefix):
+            if not blob.name.endswith(".json"):
+                continue
+            record = json.loads(blob.download_as_text())
+            documents.append(
+                Document(
+                    page_content=record["text"],
+                    metadata={
+                        "source": record["source"],
+                        "policy_category": record["policy_category"],
+                        "gcs_path": record["raw_gcs_path"],
+                    },
+                )
+            )
+    return documents
