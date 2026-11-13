@@ -12,7 +12,7 @@ load_dotenv()
 ## GCP
 
 PROJECT_ID = os.getenv("PROJECT_ID")
-LOCATION = os.getenv("LOCATION")  # Vertex AI region — used by hr_assistant/llm.py
+LOCATION = os.getenv("LOCATION")  # retained for other GCP resources
 
 ## ENV VAR / SECRETS
 
@@ -51,9 +51,8 @@ QDRANT_NOISY_COLLECTION_NAME = os.getenv(
 ## MODELS
 # All three are env-overridable so a model swap needs no code change.
 
-# gemini-2.5-flash retires ~2026-10-20 (verified Sept 2026) — set
-# LLM_MODEL_NAME to a Gemini 3.x Flash model before then. Current IDs:
-# https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
+# Gemini Developer API model ID; the app explicitly uses the `gemini/`
+# LiteLLM provider, not Vertex AI.
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-2.5-flash")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
@@ -111,7 +110,7 @@ HR_POLICY_CATEGORIES = {
 # found" instead of returning a stray, technically-in-scope-but-irrelevant
 # chunk. Jina relevance scores are ~0-1; this is a starting point, calibrate
 # empirically against real queries rather than trusting it blindly.
-RELEVANCE_THRESHOLD = os.getenv("RELEVANCE_THRESHOLD", "0.35")
+RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0.35"))
 
 ## RELIABILITY — input/output safety guardrail (Model Armor)
 
@@ -144,7 +143,7 @@ GUARDRAIL_HISTORY_TURNS = int(os.getenv("GUARDRAIL_HISTORY_TURNS", "6"))
 
 ## RELIABILITY — semantic cache
 
-SEMANTIC_CACHE_THRESHOLD = int(
+SEMANTIC_CACHE_THRESHOLD = float(
     os.getenv("SEMANTIC_CACHE_THRESHOLD", 0.93)
 )  # cosine similarity above this = cache hit
 
@@ -180,6 +179,7 @@ def check_api_keys() -> None:
         name
         for name, value in [
             ("PROJECT_ID", PROJECT_ID),
+            ("GOOGLE_API_KEY", GOOGLE_API_KEY),
             ("JINA_API_KEY", JINA_API_KEY),
             ("QDRANT_URL", QDRANT_URL),
             ("QDRANT_API_KEY", QDRANT_API_KEY),
